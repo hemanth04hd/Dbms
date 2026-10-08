@@ -1,0 +1,221 @@
+-- =========================================================
+-- SAILORS DATABASE
+-- =========================================================
+
+CREATE DATABASE SAILORS_DB;
+USE SAILORS_DB;
+
+
+-- =========================================================
+-- PART (b): CREATE TABLES FOR THE GIVEN SCHEMA
+-- =========================================================
+
+-- Create SAILORS table
+CREATE TABLE SAILORS (
+    sid INT PRIMARY KEY,
+    sname VARCHAR(30) NOT NULL,
+    rating INT,
+    age INT
+);
+
+-- Create BOAT table
+CREATE TABLE BOAT (
+    bid INT PRIMARY KEY,
+    bname VARCHAR(30) NOT NULL,
+    color VARCHAR(20)
+);
+
+-- Create RESERVES table
+CREATE TABLE RESERVES (
+    sid INT,
+    bid INT,
+    date DATE,
+
+    PRIMARY KEY (sid, bid, date),
+
+    FOREIGN KEY (sid) REFERENCES SAILORS(sid),
+    FOREIGN KEY (bid) REFERENCES BOAT(bid)
+);
+
+
+-- =========================================================
+-- PART (c): INSERT AT LEAST FIVE TUPLES FOR EACH RELATION
+-- =========================================================
+
+-- Insert tuples into SAILORS
+INSERT INTO SAILORS VALUES
+(1, 'Albert', 9, 45),
+(2, 'John', 7, 35),
+(3, 'Robert', 8, 50),
+(4, 'David', 6, 42),
+(5, 'Smith', 10, 55),
+(6, 'James', 5, 28);
+
+-- Insert tuples into BOAT
+INSERT INTO BOAT VALUES
+(101, 'Sea Breeze', 'Red'),
+(102, 'Ocean Star', 'Blue'),
+(103, 'Thunder', 'Green'),
+(104, 'Storm Rider', 'White'),
+(105, 'Sea King', 'Yellow'),
+(106, 'Black Pearl', 'Black');
+
+-- Insert tuples into RESERVES
+INSERT INTO RESERVES VALUES
+(1, 101, '2026-01-10'),
+(1, 103, '2026-01-15'),
+(2, 102, '2026-02-05'),
+(2, 104, '2026-02-10'),
+(3, 101, '2026-03-01'),
+(3, 102, '2026-03-05'),
+(3, 103, '2026-03-10'),
+(4, 105, '2026-03-15'),
+(5, 101, '2026-04-01'),
+(5, 104, '2026-04-05');
+
+
+-- =========================================================
+-- QUESTION 1:
+-- Find the colors of boats reserved by Albert
+-- =========================================================
+
+SELECT DISTINCT B.color
+FROM BOAT B
+JOIN RESERVES R ON B.bid = R.bid
+JOIN SAILORS S ON R.sid = S.sid
+WHERE S.sname = 'Albert';
+
+
+-- =========================================================
+-- QUESTION 2:
+-- Find all sailor IDs of sailors who have a rating of
+-- at least 8 OR reserved boat 103
+-- =========================================================
+
+SELECT sid
+FROM SAILORS
+WHERE rating >= 8
+
+UNION
+
+SELECT sid
+FROM RESERVES
+WHERE bid = 103;
+
+
+-- =========================================================
+-- QUESTION 3:
+-- Find names of sailors who have not reserved a boat
+-- whose name contains the string "storm".
+-- Order names in ascending order.
+-- =========================================================
+
+SELECT S.sname
+FROM SAILORS S
+WHERE S.sid NOT IN (
+    SELECT R.sid
+    FROM RESERVES R
+    JOIN BOAT B ON R.bid = B.bid
+    WHERE LOWER(B.bname) LIKE '%storm%'
+)
+ORDER BY S.sname ASC;
+
+
+-- =========================================================
+-- QUESTION 4:
+-- Find names of sailors who have reserved ALL boats
+-- =========================================================
+
+SELECT S.sname
+FROM SAILORS S
+WHERE NOT EXISTS (
+    SELECT B.bid
+    FROM BOAT B
+    WHERE NOT EXISTS (
+        SELECT R.bid
+        FROM RESERVES R
+        WHERE R.sid = S.sid
+        AND R.bid = B.bid
+    )
+);
+
+
+-- =========================================================
+-- QUESTION 5:
+-- Find the name and age of the oldest sailor
+-- =========================================================
+
+SELECT sname, age
+FROM SAILORS
+WHERE age = (
+    SELECT MAX(age)
+    FROM SAILORS
+);
+
+
+-- =========================================================
+-- QUESTION 6:
+-- For each boat reserved by at least 5 sailors
+-- with age >= 40, find boat ID and average age
+-- =========================================================
+
+SELECT R.bid, AVG(S.age) AS average_age
+FROM RESERVES R
+JOIN SAILORS S ON R.sid = S.sid
+WHERE S.age >= 40
+GROUP BY R.bid
+HAVING COUNT(DISTINCT R.sid) >= 5;
+
+
+-- =========================================================
+-- QUESTION 7:
+-- Create a view that shows names and colors of all
+-- boats reserved by a sailor with a specific rating
+-- =========================================================
+
+CREATE VIEW RatedBoats AS
+SELECT DISTINCT B.bname, B.color
+FROM BOAT B
+JOIN RESERVES R ON B.bid = R.bid
+JOIN SAILORS S ON R.sid = S.sid
+WHERE S.rating = 8;
+
+-- Display the view
+SELECT * FROM RatedBoats;
+
+
+-- =========================================================
+-- QUESTION 8:
+-- Create a trigger that prevents boats from being deleted
+-- if they have active reservations
+-- =========================================================
+
+DELIMITER //
+
+CREATE TRIGGER prevent_boat_delete
+BEFORE DELETE ON BOAT
+FOR EACH ROW
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM RESERVES
+        WHERE bid = OLD.bid
+    ) THEN
+
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT =
+        'Cannot delete boat: active reservation exists';
+
+    END IF;
+END //
+
+DELIMITER ;
+
+
+-- =========================================================
+-- TEST THE TRIGGER
+-- =========================================================
+
+-- This boat has reservations, so deletion will be prevented
+DELETE FROM BOAT
+WHERE bid = 101;
